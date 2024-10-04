@@ -1,76 +1,108 @@
-import { createElement } from "react";
-import { AppShell, AppMenu, MenuItem, AppContent } from "./symbols";
+import React, {createElement, FC, ReactNode} from "react";
+import {AppContent, AppMenu, AppShell, MenuItem} from "./symbols";
+import ErrorBoundary from "./ErrorBoundary.tsx";
 
-// @ts-ignore
-const symbolStore = {
-  AppShell,
-  AppMenu,
-  MenuItem,
-  AppContent,
+const symbolStore: Record<string, FC> = {
+    AppShell,
+    AppMenu,
+    MenuItem,
+    AppContent,
 };
 
 interface JSXParserProps {
-  value: string;
+    value: string;
 }
 
+
 type Node = {
-  tag: string;
-  type: "openning" | "parsed";
-  children: Node[];
+    tag: string;
+    type: "opening" | 'enclosing' | "parsed";
+    children: (Node | string)[];
 };
 
-export const JSXParser = ({ value }: JSXParserProps) => {
-  let STACK: Node[] = [];
-  const DOM: Node[] = STACK;
-  const stack = [...value];
+export const JSXParser = ({value}: JSXParserProps) => {
+    const DOM: Node[] = [{children: [], tag: "main", type: 'opening'}]
+    const TAG_STACK: Node[] = [...DOM];
+    const symbolsStack = [...value];
 
-  let mightBeTag = false;
-  let word: string = "";
+    let mightBeTag = false;
+    let word: string = "";
 
-  const openingTag = () => {
-    const node = STACK[STACK.length - 1];
-    if (node?.type === "openning") return node;
-  };
 
-  while (stack.length) {
-    const current = stack.shift();
-    if (current === "<") {
-      mightBeTag = true;
-      if (STACK[STACK.length - 1]?.type === "openning") {
-        STACK[STACK.length - 1].children.push(word);
-        word = "";
-      }
-      continue;
+    while (symbolsStack.length) {
+        const TAG = TAG_STACK[TAG_STACK.length - 1]
+        const symbol = symbolsStack.shift();
+
+        if (symbol === "<" && symbolsStack?.[symbolsStack.indexOf(symbol) + 1] === "/" && TAG?.type === 'opening') {
+            TAG.type = 'enclosing';
+            TAG.children.push(word);
+            word = "";
+            continue;
+        }
+        if (symbol === "<" && TAG?.type === "opening") {
+            mightBeTag = true;
+            TAG.children.push(word);
+            word = "";
+            continue;
+        }
+        if (symbol === "<") {
+            mightBeTag = true;
+            continue;
+        }
+        if (
+            symbol === ">" &&
+            TAG?.type === "enclosing"
+        ) {
+            TAG.type = "parsed";
+            mightBeTag = false;
+            word = "";
+            TAG_STACK.pop()
+            continue;
+        }
+        if (symbol === ">" && mightBeTag && TAG?.type === 'opening') {
+            const newTag: Node = {tag: word, type: "opening", children: []};
+            TAG.children.push(newTag);
+            TAG_STACK.push(newTag);
+            mightBeTag = false;
+            word = "";
+            continue;
+        }
+        if (symbol === ">" && mightBeTag) {
+            const newTag: Node = {tag: word, type: "opening", children: []};
+            TAG_STACK.push(newTag);
+            mightBeTag = false;
+            word = "";
+            continue;
+        }
+        if (symbol === "/") {
+            continue;
+        }
+        word = word + symbol;
     }
-    if (
-      current === ">" &&
-      mightBeTag &&
-      STACK[STACK.length - 1]?.type === "openning"
-    ) {
-      STACK[STACK.length - 1].type = "parsed";
 
-      mightBeTag = false;
-      word = "";
-      continue;
-    }
-    if (current === ">" && mightBeTag) {
-      const tag: Node = { tag: word, type: "openning", children: [] };
+    const renderNodes = (nodes: (Node | string)[]): ReactNode => {
+        if (!nodes.length) return null;
 
-      if (STACK[STACK.length - 1].type === "openning") {
-        DOM.push(STACK);
-        STACK = STACK[STACK.length - 1].children;
-      } else {
-        STACK.push(tag);
-      }
+        return nodes.map(
+            (node, index) => {
+                if (typeof node === "string") {
+                    return node as string;
+                }
+                const CustomTag = symbolStore[node.tag]
+                if (!!CustomTag) {
+                    return createElement(CustomTag, {key: index}, renderNodes(node.children))
+                } else {
+                    return createElement(node.tag, {key: index}, renderNodes(node.children));
+                }
+            }
+        );
+    }
 
-      mightBeTag = false;
-      word = "";
-      continue;
-    }
-    if (current === "/" && mightBeTag) {
-      continue;
-    }
-    word = word + current;
-  }
-  return createElement("pre", {}, value);
+    console.log('%c DOM', 'background-color: black; color: red; font-weight: 900;', DOM);
+
+    return (<>
+        {createElement("pre", {}, value)}
+        <br/>
+        <ErrorBoundary>{renderNodes(DOM)}</ErrorBoundary>
+    </>);
 };
