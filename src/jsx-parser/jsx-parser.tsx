@@ -96,7 +96,7 @@ export const JSXParser = ({value}: JSXParserProps) => {
         });
     };
 
-    console.log("%c DOM", "background-color: black; color: red; font-weight: 900;", ROOT);
+    console.log("%c ROOT", "background-color: black; color: red; font-weight: 900;", ROOT);
 
     return (
         <>
